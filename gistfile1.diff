@@ -1,0 +1,17 @@
+--- dent.orig	2008-07-22 02:52:27.000000000 -0300
++++ dent	2008-08-01 02:16:08.000000000 -0300
+@@ -129,7 +129,13 @@
+    
+ def main():
+    options = {}
+-   U,P = GetCreds()
++   try:
++       U,P = GetCreds()
++   except IOError:
++       sys.stderr.write(sys.argv[0] + ": " + os.path.expanduser(CREDS_FILE) +
++                        " not found, aborting.\n")
++       sys.exit(1)
++
+    parser = optparse.OptionParser()
+ 
+    parser.add_option('-p', '--public', dest='public', action='store_true')
