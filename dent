@@ -129,7 +129,13 @@ def GetCreds():
    
 def main():
    options = {}
-   U,P = GetCreds()
+   try:
+       U,P = GetCreds()
+   except IOError:
+       sys.stderr.write(sys.argv[0] + ": " + os.path.expanduser(CREDS_FILE) +
+                        " not found, aborting.\n")
+       sys.exit(1)
+
    parser = optparse.OptionParser()
 
    parser.add_option('-p', '--public', dest='public', action='store_true')
