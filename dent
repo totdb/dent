@@ -1,0 +1,163 @@
+#!/usr/bin/python
+
+import re
+import os
+import sys
+import getopt
+import simplejson
+import urllib
+import urllib2
+import base64
+import optparse
+from exceptions import Exception
+
+TWITTER_BITS = ('twitter.com', '~/.simpletwitrc')
+IDENTICA_BITS = ('identi.ca/api', '~/.identicarc')
+BASE_URL,CREDS_FILE = IDENTICA_BITS
+ARGV_0 = os.path.basename(sys.argv[0])
+if ARGV_0 == 'twit':
+    BASE_URL,CREDS_FILE = TWITTER_BITS
+
+
+PROTO = 'http://'
+PUBLIC_URL = '/statuses/public_timeline.json'
+FRIENDS_TIMELINE = '/statuses/friends_timeline.json'
+DM = '/direct_messages.json'
+REPLIES = '/replies.json'
+POST_URL = '/statuses/update.json'
+
+def MakeUrl(suffix):
+   return "%s%s%s" % (PROTO, BASE_URL, suffix)
+
+def HtmlEscape(s):
+   entities = {
+      '&amp;'  : '&',
+      '&quot;' : '"',
+      '&lt;'   : '<',
+      '&gt;'   : '>',
+   }
+   for k,v in entities.items():
+      s = s.replace(k,v)
+   return s
+
+class TwitClient(object):
+   def __init__(self, user=None, pswd=None):
+      self.auth = None
+      if user and pswd:
+         self.SetPassword(user, pswd)
+
+   def _authRequest(self, url, data=None):
+      return urllib2.Request(url = url, 
+                             headers = {'Authorization'  : self.auth },
+                             data = data,
+                            )
+
+   def SetPassword(self, user, pswd):
+      self.auth = 'Basic ' + base64.encodestring("%s:%s" % (user,pswd))[:-1]
+
+   def PublicTimeline(self):
+      '''return a list of public timeline entries'''
+      return simplejson.loads(urllib2.urlopen(MakeUrl(PUBLIC_URL)).read())
+
+   def UserTimeline(self):
+      '''return the logged in user's friends + self timeline.'''
+      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(FRIENDS_TIMELINE))).read())
+
+   def DirectMessages(self):
+      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(DM))).read())
+   
+   def Replies(self):
+      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(REPLIES))).read())
+     
+   def ListUser(self, user=None):
+      '''List tweets for user if specified, otherwised list tweets for the logged in user'''
+      if user:
+         user_url = MakeUrl('/statuses/user_timeline/%s.json' % user) 
+      else:
+         user_url = MakeUrl('/statuses/user_timeline.json')
+
+      r = self._authRequest(url=user_url)
+      return simplejson.loads(urllib2.urlopen(r).read())
+
+   def Post(self, status):
+      '''Update the logged in user's status'''
+      req = self._authRequest(url=MakeUrl(POST_URL),
+                              data = urllib.urlencode({'status':status}),
+                             )
+      return simplejson.loads(urllib2.urlopen(req).read())
+
+def dump_user(user, t):
+   d = t.ListUser(user)
+   try:
+       one = d[0]
+       print "Name: %s\nInfo: %s\nLocation: %s" % (one['user']['name'], one['user']['description'], one['user']['location'])
+   except:
+       pass
+
+def dump_single(x):
+   try:
+       print "<%s> %s" % (x['user']['screen_name'], HtmlEscape(x['text']))
+   except:
+       print "<%s> %s" % (x['sender_screen_name'], x['text'])
+   
+def dump_dict(d, limit = 20):
+   for x in d:
+      if limit == 0:
+         break
+      dump_single(x)
+      limit -= 1
+
+def GetCreds():
+   rc = CREDS_FILE
+   f = file(os.path.expanduser(rc))
+   u = re.compile(r'username\s{0,}=\s{0,}(.*)')
+   p = re.compile(r'password\s{0,}=\s{0,}(.*)')
+   username = None
+   password = None
+   for line in f.readlines():
+      m = u.search(line)
+      if m:
+         username = m.group(1)
+         continue
+      m = p.search(line)
+      if m:
+         password = m.group(1)
+   f.close()
+   if not (username and password):
+      raise Exception("Can't get credentials")
+   return (username, password)
+   
+def main():
+   options = {}
+   U,P = GetCreds()
+   parser = optparse.OptionParser()
+
+   parser.add_option('-p', '--public', dest='public', action='store_true')
+   parser.add_option('-l', '--limit', dest='limit', type="int", default=10)
+   parser.add_option('-u', '--update', dest='status', type="string", default=None)
+   parser.add_option('-i', '--info', dest='user', default=None)
+   parser.add_option('-x', '--extended', dest='xtra', default=None)
+   parser.add_option('-d', '--direct', dest='direct', action='store_true',default=False)
+   parser.add_option('-r', '--replies', dest='replies', action='store_true',default=False)
+
+
+   opts,args = parser.parse_args()
+
+   t = TwitClient(user=U, pswd=P)
+   if opts.public:
+      dump_dict(t.PublicTimeline(), opts.limit)
+   elif opts.status:
+      dump_single(t.Post(opts.status))
+   elif opts.user:
+      dump_dict(t.ListUser(opts.user), opts.limit)
+   elif opts.direct:
+      dump_dict(t.DirectMessages(), opts.limit)
+   elif opts.replies:
+      dump_dict(t.Replies(), opts.limit)
+   elif opts.xtra:
+      dump_user(opts.xtra, t)
+   else:
+      dump_dict(t.UserTimeline(), opts.limit)
+
+if __name__ == "__main__":
+   main()
