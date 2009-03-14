@@ -26,8 +26,11 @@ DM = '/direct_messages.json'
 REPLIES = '/replies.json'
 POST_URL = '/statuses/update.json'
 
-def MakeUrl(suffix):
-   return "%s%s%s" % (PROTO, BASE_URL, suffix)
+def MakeUrl(suffix, page=1):
+   s = "%s%s%s" % (PROTO, BASE_URL, suffix)
+   if suffix != POST_URL:
+      s += "?page=%d" % page
+   return s
 
 def HtmlEscape(s):
    entities = {
@@ -55,26 +58,26 @@ class TwitClient(object):
    def SetPassword(self, user, pswd):
       self.auth = 'Basic ' + base64.encodestring("%s:%s" % (user,pswd))[:-1]
 
-   def PublicTimeline(self):
+   def PublicTimeline(self, page):
       '''return a list of public timeline entries'''
-      return simplejson.loads(urllib2.urlopen(MakeUrl(PUBLIC_URL)).read())
+      return simplejson.loads(urllib2.urlopen(MakeUrl(PUBLIC_URL, page)).read())
 
-   def UserTimeline(self):
+   def UserTimeline(self, page):
       '''return the logged in user's friends + self timeline.'''
-      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(FRIENDS_TIMELINE))).read())
+      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(FRIENDS_TIMELINE, page))).read())
 
-   def DirectMessages(self):
-      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(DM))).read())
+   def DirectMessages(self, page):
+      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(DM, page))).read())
    
-   def Replies(self):
-      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(REPLIES))).read())
+   def Replies(self, page):
+      return simplejson.loads(urllib2.urlopen(self._authRequest(MakeUrl(REPLIES, page))).read())
      
-   def ListUser(self, user=None):
+   def ListUser(self, page, user=None):
       '''List tweets for user if specified, otherwised list tweets for the logged in user'''
       if user:
-         user_url = MakeUrl('/statuses/user_timeline/%s.json' % user) 
+         user_url = MakeUrl('/statuses/user_timeline/%s.json' % user, page) 
       else:
-         user_url = MakeUrl('/statuses/user_timeline.json')
+         user_url = MakeUrl('/statuses/user_timeline.json', page)
 
       r = self._authRequest(url=user_url)
       return simplejson.loads(urllib2.urlopen(r).read())
@@ -87,7 +90,7 @@ class TwitClient(object):
       return simplejson.loads(urllib2.urlopen(req).read())
 
 def dump_user(user, t):
-   d = t.ListUser(user)
+   d = t.ListUser(1, user)
    try:
        one = d[0]
        print "Name: %s\nInfo: %s\nLocation: %s" % (one['user']['name'], one['user']['description'], one['user']['location'])
@@ -129,13 +132,7 @@ def GetCreds():
    
 def main():
    options = {}
-   try:
-       U,P = GetCreds()
-   except IOError:
-       sys.stderr.write(sys.argv[0] + ": " + os.path.expanduser(CREDS_FILE) +
-                        " not found, aborting.\n")
-       sys.exit(1)
-
+   U,P = GetCreds()
    parser = optparse.OptionParser()
 
    parser.add_option('-p', '--public', dest='public', action='store_true')
@@ -145,25 +142,26 @@ def main():
    parser.add_option('-x', '--extended', dest='xtra', default=None)
    parser.add_option('-d', '--direct', dest='direct', action='store_true',default=False)
    parser.add_option('-r', '--replies', dest='replies', action='store_true',default=False)
+   parser.add_option('-g', '--page', dest='page', type="int", default=1)
 
 
    opts,args = parser.parse_args()
 
    t = TwitClient(user=U, pswd=P)
    if opts.public:
-      dump_dict(t.PublicTimeline(), opts.limit)
+      dump_dict(t.PublicTimeline(opts.page), opts.limit)
    elif opts.status:
       dump_single(t.Post(opts.status))
    elif opts.user:
-      dump_dict(t.ListUser(opts.user), opts.limit)
+      dump_dict(t.ListUser(opts.page, opts.user), opts.limit)
    elif opts.direct:
-      dump_dict(t.DirectMessages(), opts.limit)
+      dump_dict(t.DirectMessages(opts.page), opts.limit)
    elif opts.replies:
-      dump_dict(t.Replies(), opts.limit)
+      dump_dict(t.Replies(opts.page), opts.limit)
    elif opts.xtra:
       dump_user(opts.xtra, t)
    else:
-      dump_dict(t.UserTimeline(), opts.limit)
+      dump_dict(t.UserTimeline(opts.page), opts.limit)
 
 if __name__ == "__main__":
    main()
