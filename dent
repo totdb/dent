@@ -9,6 +9,8 @@ import urllib
 import urllib2
 import base64
 import optparse
+import time
+import calendar
 from exceptions import Exception
 
 TWITTER_BITS = ('twitter.com', '~/.simpletwitrc')
@@ -42,6 +44,13 @@ def HtmlEscape(s):
    for k,v in entities.items():
       s = s.replace(k,v)
    return s
+
+def MakeLocalDate(utcDate):
+   #[Wed May 13 08:48:17 +0000 2009] <bs> Haircut at Grasshopper from the fantastic @littlestn.
+   t = time.strptime(utcDate, '%a %B %d %H:%M:%S +0000 %Y')
+   n = calendar.timegm(t)
+   t = time.localtime(n)
+   return time.strftime('(%m/%d/%Y) %H:%M',t)
 
 class TwitClient(object):
    def __init__(self, user=None, pswd=None):
@@ -98,8 +107,11 @@ def dump_user(user, t):
        pass
 
 def dump_single(x):
+   pre = ""
+   if GetOpts().show_date:
+       pre = "[%s] " % MakeLocalDate(x['created_at'])
    try:
-       print "<%s> %s" % (x['user']['screen_name'], HtmlEscape(x['text']))
+       print "%s<%s> %s" % (pre, x['user']['screen_name'], HtmlEscape(x['text']))
    except:
        print "<%s> %s" % (x['sender_screen_name'], x['text'])
    
@@ -129,6 +141,15 @@ def GetCreds():
    if not (username and password):
       raise Exception("Can't get credentials")
    return (username, password)
+
+_opts = None
+def SetOpts(opts):
+   global _opts
+   _opts = opts
+
+def GetOpts():
+   global _opts
+   return _opts
    
 def main():
    options = {}
@@ -143,10 +164,12 @@ def main():
    parser.add_option('-d', '--direct', dest='direct', action='store_true',default=False)
    parser.add_option('-r', '--replies', dest='replies', action='store_true',default=False)
    parser.add_option('-g', '--page', dest='page', type="int", default=1)
+   parser.add_option('-s', '--show-date', dest='show_date', action="store_true", default=False)
 
 
    opts,args = parser.parse_args()
 
+   SetOpts(opts)
    t = TwitClient(user=U, pswd=P)
    if opts.public:
       dump_dict(t.PublicTimeline(opts.page), opts.limit)
