@@ -28,6 +28,9 @@ DM = '/direct_messages.json'
 REPLIES = '/replies.json'
 POST_URL = '/statuses/update.json'
 
+def GetShortName():
+    return ('I','T')[ARGV_0 == 'twit'] + " "
+
 def MakeUrl(suffix, page=1):
    s = "%s%s%s" % (PROTO, BASE_URL, suffix)
    if suffix != POST_URL:
@@ -47,7 +50,7 @@ def HtmlEscape(s):
 
 def MakeLocalDate(utcDate):
    #[Wed May 13 08:48:17 +0000 2009] <bs> Haircut at Grasshopper from the fantastic @littlestn.
-   t = time.strptime(utcDate, '%a %B %d %H:%M:%S +0000 %Y')
+   t = time.strptime(utcDate, '%a %b %d %H:%M:%S +0000 %Y')
    n = calendar.timegm(t)
    t = time.localtime(n)
    return time.strftime('(%m/%d/%Y) %H:%M',t)
@@ -93,6 +96,8 @@ class TwitClient(object):
 
    def Post(self, status):
       '''Update the logged in user's status'''
+      if status == '-':
+         status = sys.stdin.read()
       req = self._authRequest(url=MakeUrl(POST_URL),
                               data = urllib.urlencode({'status':status}),
                              )
@@ -111,7 +116,7 @@ def dump_single(x):
    if GetOpts().show_date:
        pre = "[%s] " % MakeLocalDate(x['created_at'])
    try:
-       print "%s<%s> %s" % (pre, x['user']['screen_name'], HtmlEscape(x['text']))
+       print "%s%s<%s> %s" % (pre, GetShortName(), x['user']['screen_name'], HtmlEscape(x['text']))
    except:
        print "<%s> %s" % (x['sender_screen_name'], x['text'])
    
