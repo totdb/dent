@@ -23,13 +23,15 @@ if ARGV_0 == 'twit':
 
 PROTO = 'http://'
 PUBLIC_URL = '/statuses/public_timeline.json'
+TWIT_SEARCH_URL = PROTO + 'search.twitter.com/search.json'
+ID_SEARCH_URL = PROTO + 'identi.ca/api/search.json'
 FRIENDS_TIMELINE = '/statuses/friends_timeline.json'
 DM = '/direct_messages.json'
 REPLIES = '/replies.json'
 POST_URL = '/statuses/update.json'
 
-def GetShortName():
-    return ('I','T')[ARGV_0 == 'twit'] + " "
+def GetShortName(q=False):
+    return (('I','T'), ('IQ', 'TQ'))[q][ARGV_0 == 'twit'] + " "
 
 def MakeUrl(suffix, page=1):
    s = "%s%s%s" % (PROTO, BASE_URL, suffix)
@@ -48,9 +50,12 @@ def HtmlEscape(s):
       s = s.replace(k,v)
    return s
 
-def MakeLocalDate(utcDate):
+def MakeLocalDate(utcDate, q=False):
    #[Wed May 13 08:48:17 +0000 2009] <bs> Haircut at Grasshopper from the fantastic @littlestn.
-   t = time.strptime(utcDate, '%a %b %d %H:%M:%S +0000 %Y')
+   fmt = '%a %b %d %H:%M:%S +0000 %Y'
+   if q:
+      fmt = '%a, %d %b %Y %H:%M:%S +0000'
+   t = time.strptime(utcDate, fmt)
    n = calendar.timegm(t)
    t = time.localtime(n)
    return time.strftime('(%m/%d/%Y) %H:%M',t)
@@ -66,6 +71,13 @@ class TwitClient(object):
                              headers = {'Authorization'  : self.auth },
                              data = data,
                             )
+   def _makeSearchUrl(self, q, limit):
+      s = (ID_SEARCH_URL,TWIT_SEARCH_URL)[ARGV_0 == 'twit']
+      return "?".join((s, urllib.urlencode({'q':q, 'rpp' : limit})))
+
+   def Search(self, query, limit):
+      url = self._makeSearchUrl(query, limit)
+      return simplejson.loads(urllib2.urlopen(url).read())
 
    def SetPassword(self, user, pswd):
       self.auth = 'Basic ' + base64.encodestring("%s:%s" % (user,pswd))[:-1]
@@ -111,20 +123,28 @@ def dump_user(user, t):
    except:
        pass
 
-def dump_single(x):
+def dump_single(x, q=False):
    pre = ""
    if GetOpts().show_date:
-       pre = "[%s] " % MakeLocalDate(x['created_at'])
-   try:
-       print "%s%s<%s> %s" % (pre, GetShortName(), x['user']['screen_name'], HtmlEscape(x['text']))
-   except:
-       print "<%s> %s" % (x['sender_screen_name'], x['text'])
+       pre = "[%s] " % MakeLocalDate(x['created_at'],True)
+
+   if q:
+       print "%s%s<%s> %s" % (pre, GetShortName(True), x['from_user'], HtmlEscape(x['text']))
+   else:
+       try:
+           print "%s%s<%s> %s" % (pre, GetShortName(), x['user']['screen_name'], HtmlEscape(x['text']))
+       except:
+           print "<%s> %s" % (x['sender_screen_name'], x['text'])
    
-def dump_dict(d, limit = 20):
+def dump_query(obj):
+   for x in obj['results']:
+      dump_single(x,True)
+
+def dump_dict(d, limit = 20, q=False):
    for x in d:
       if limit == 0:
          break
-      dump_single(x)
+      dump_single(x,q)
       limit -= 1
 
 def GetCreds():
@@ -170,13 +190,16 @@ def main():
    parser.add_option('-r', '--replies', dest='replies', action='store_true',default=False)
    parser.add_option('-g', '--page', dest='page', type="int", default=1)
    parser.add_option('-s', '--show-date', dest='show_date', action="store_true", default=False)
+   parser.add_option('-q', '--query', dest='q', default=None)
 
 
    opts,args = parser.parse_args()
 
    SetOpts(opts)
    t = TwitClient(user=U, pswd=P)
-   if opts.public:
+   if opts.q:
+      dump_query(t.Search(opts.q, opts.limit))
+   elif opts.public:
       dump_dict(t.PublicTimeline(opts.page), opts.limit)
    elif opts.status:
       dump_single(t.Post(opts.status))
