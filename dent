@@ -126,7 +126,7 @@ def dump_user(user, t):
 def dump_single(x, q=False):
    pre = ""
    if GetOpts().show_date:
-       pre = "[%s] " % MakeLocalDate(x['created_at'],True)
+       pre = "[%s] " % MakeLocalDate(x['created_at'],q)
 
    if q:
        print "%s%s<%s> %s" % (pre, GetShortName(True), x['from_user'], HtmlEscape(x['text']))
